@@ -1,0 +1,5 @@
+{
+  "name": "Pi-XEL(AI Pixel Art Generator)",
+  "description": "A sophisticated AI-powered pixel art creator that transforms English words into stylized 32x32 or 64x64 pixel art across various retro and modern themes.",
+  "requestFramePermissions": []
+}
