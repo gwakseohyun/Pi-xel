@@ -19,7 +19,6 @@ const App: React.FC = () => {
     originalResult: null
   });
 
-  // API 호출 대신 로컬 파일을 불러와서 픽셀화 프로세싱을 수행합니다.
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -30,8 +29,6 @@ const App: React.FC = () => {
       const reader = new FileReader();
       reader.onload = async (event) => {
         const base64 = event.target?.result as string;
-        
-        // AI Studio에서 가져온 이미지를 이 앱의 픽셀 알고리즘으로 처리
         const processedImage = await processPixelArt(base64, resolution);
         
         setState(prev => ({
@@ -52,7 +49,6 @@ const App: React.FC = () => {
         error: "이미지 처리에 실패했습니다." 
       }));
     }
-    // 같은 파일을 다시 선택할 수 있도록 초기화
     e.target.value = '';
   };
 
@@ -62,34 +58,26 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col md:flex-row font-sans overflow-hidden">
-      {/* Sidebar UI - 디자인 원형 유지 */}
       <aside className="w-full md:w-[400px] bg-slate-800 border-r border-slate-700 p-6 overflow-y-auto z-20 shadow-xl no-scrollbar">
         <div className="mb-10">
           <h1 className="pixel-font text-2xl text-blue-400 tracking-tighter">Pi-XEL</h1>
-          <p className="text-slate-500 text-[10px] mt-1 uppercase tracking-[0.3em]">AI Art Processor (Prototype)</p>
+          <p className="text-slate-500 text-[10px] mt-1 uppercase tracking-[0.3em]">Pixel Art Processor</p>
         </div>
 
         <div className="space-y-8">
-          <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-xl mb-4">
-            <p className="text-[10px] text-amber-400 font-bold uppercase tracking-wider mb-1">Offline Mode</p>
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              API 연동이 해제되었습니다. AI Studio에서 생성한 이미지를 업로드하여 픽셀화 가공 성능을 확인하세요.
-            </p>
-          </div>
-
           <div>
-            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2 tracking-widest">Keyword / Name</label>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2 tracking-widest">Asset Name</label>
             <input 
               type="text" 
               value={keyword} 
               onChange={(e) => setKeyword(e.target.value)} 
-              placeholder="e.g. Pixel Sword" 
+              placeholder="e.g. Hero Sprite" 
               className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-4 focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-200 transition-all placeholder:text-slate-700" 
             />
           </div>
 
           <div>
-            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-3 tracking-widest">Processing Theme</label>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-3 tracking-widest">Style Theme</label>
             <div className="grid grid-cols-2 gap-3">
               {THEMES.map(t => (
                 <ThemeCard 
@@ -124,12 +112,11 @@ const App: React.FC = () => {
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                 <span>Processing...</span>
               </div>
-            ) : "Upload & Pixelate"}
+            ) : "Select & Pixelate"}
           </button>
         </div>
       </aside>
 
-      {/* Main Preview Area - 디자인 원형 유지 */}
       <main className="flex-1 bg-slate-950 p-6 md:p-12 flex flex-col items-center justify-center relative min-h-[600px]">
         {state.error && (
           <div className="absolute top-10 inset-x-10 max-w-xl mx-auto bg-red-500/10 border border-red-500/30 p-4 rounded-2xl text-center backdrop-blur-md z-30 animate-in fade-in">
@@ -142,8 +129,7 @@ const App: React.FC = () => {
              <div className="flex flex-col items-center gap-6">
                 <div className="w-24 h-24 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                 <div className="text-center">
-                  <span className="text-blue-500 pixel-font text-[10px] block mb-2 tracking-[0.2em]">PIXELATING...</span>
-                  <p className="text-slate-500 text-[10px] uppercase">Refining dots and edges</p>
+                  <span className="text-blue-500 pixel-font text-[10px] block mb-2 tracking-[0.2em]">RENDERING...</span>
                 </div>
              </div>
           ) : state.resultImageUrl ? (
@@ -169,15 +155,14 @@ const App: React.FC = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
               </div>
-              <p className="font-bold uppercase tracking-[0.4em] text-[10px] text-slate-800">Ready to Process</p>
+              <p className="font-bold uppercase tracking-[0.4em] text-[10px] text-slate-800">Drop Image to Start</p>
             </div>
           )}
         </div>
 
-        {/* History Gallery */}
         {history.length > 0 && (
           <div className="mt-20 w-full max-w-4xl animate-in fade-in slide-in-from-bottom-8">
-            <h3 className="text-[10px] font-bold text-slate-700 uppercase tracking-[0.3em] mb-8 text-center">History</h3>
+            <h3 className="text-[10px] font-bold text-slate-700 uppercase tracking-[0.3em] mb-8 text-center">Gallery</h3>
             <div className="flex gap-6 overflow-x-auto pb-6 px-4 justify-center no-scrollbar">
               {history.map((item, idx) => (
                 <button 
