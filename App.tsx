@@ -1,8 +1,7 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Theme, GenerationState } from './types';
 import { THEMES } from './constants';
-import { generatePixelArtImage } from './services/geminiService';
 import { processPixelArt, downloadImage } from './utils/imageUtils';
 import ThemeCard from './components/ThemeCard';
 
@@ -11,6 +10,7 @@ const App: React.FC = () => {
   const [resolution] = useState<number>(64);
   const [selectedTheme, setSelectedTheme] = useState<Theme>(THEMES[0]);
   const [history, setHistory] = useState<{url: string, keyword: string}[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [state, setState] = useState<GenerationState>({
     isGenerating: false,
@@ -19,62 +19,77 @@ const App: React.FC = () => {
     originalResult: null
   });
 
-  const handleGenerate = async () => {
-    if (!keyword.trim()) return;
+  // API 호출 대신 로컬 파일을 불러와서 픽셀화 프로세싱을 수행합니다.
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
     setState(prev => ({ ...prev, isGenerating: true, error: null }));
 
     try {
-      // 1. Gemini API를 통한 원본 이미지 생성
-      const rawImage = await generatePixelArtImage(
-        keyword,
-        selectedTheme.promptSuffix
-      );
-
-      // 2. 후처리 유틸리티를 통한 픽셀화 및 투명화 처리
-      const processedImage = await processPixelArt(rawImage, resolution);
-      
-      setState(prev => ({
-        ...prev,
-        isGenerating: false,
-        resultImageUrl: processedImage,
-        originalResult: rawImage
-      }));
-      
-      setHistory(prev => [{url: processedImage, keyword}, ...prev].slice(0, 8));
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const base64 = event.target?.result as string;
+        
+        // AI Studio에서 가져온 이미지를 이 앱의 픽셀 알고리즘으로 처리
+        const processedImage = await processPixelArt(base64, resolution);
+        
+        setState(prev => ({
+          ...prev,
+          isGenerating: false,
+          resultImageUrl: processedImage,
+          originalResult: base64
+        }));
+        
+        const displayKeyword = keyword || file.name.split('.')[0];
+        setHistory(prev => [{url: processedImage, keyword: displayKeyword}, ...prev].slice(0, 8));
+      };
+      reader.readAsDataURL(file);
     } catch (err: any) {
-      console.error("Generation flow error:", err);
       setState(prev => ({ 
         ...prev, 
         isGenerating: false, 
-        error: err.message || "생성에 실패했습니다." 
+        error: "이미지 처리에 실패했습니다." 
       }));
     }
+    // 같은 파일을 다시 선택할 수 있도록 초기화
+    e.target.value = '';
+  };
+
+  const triggerUpload = () => {
+    fileInputRef.current?.click();
   };
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col md:flex-row font-sans overflow-hidden">
-      {/* Sidebar UI - 원래의 세련된 디자인 유지 */}
-      <aside className="w-full md:w-[400px] bg-slate-800 border-r border-slate-700 p-6 overflow-y-auto z-20 shadow-xl">
+      {/* Sidebar UI - 디자인 원형 유지 */}
+      <aside className="w-full md:w-[400px] bg-slate-800 border-r border-slate-700 p-6 overflow-y-auto z-20 shadow-xl no-scrollbar">
         <div className="mb-10">
           <h1 className="pixel-font text-2xl text-blue-400 tracking-tighter">Pi-XEL</h1>
-          <p className="text-slate-500 text-[10px] mt-1 uppercase tracking-[0.3em]">AI Pixel Art Generator</p>
+          <p className="text-slate-500 text-[10px] mt-1 uppercase tracking-[0.3em]">AI Art Processor (Prototype)</p>
         </div>
 
         <div className="space-y-8">
+          <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-xl mb-4">
+            <p className="text-[10px] text-amber-400 font-bold uppercase tracking-wider mb-1">Offline Mode</p>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              API 연동이 해제되었습니다. AI Studio에서 생성한 이미지를 업로드하여 픽셀화 가공 성능을 확인하세요.
+            </p>
+          </div>
+
           <div>
-            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2 tracking-widest">What to create?</label>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2 tracking-widest">Keyword / Name</label>
             <input 
               type="text" 
               value={keyword} 
               onChange={(e) => setKeyword(e.target.value)} 
-              placeholder="e.g. Cyberpunk Katana" 
+              placeholder="e.g. Pixel Sword" 
               className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-4 focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-200 transition-all placeholder:text-slate-700" 
             />
           </div>
 
           <div>
-            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-3 tracking-widest">Select Style</label>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-3 tracking-widest">Processing Theme</label>
             <div className="grid grid-cols-2 gap-3">
               {THEMES.map(t => (
                 <ThemeCard 
@@ -87,11 +102,19 @@ const App: React.FC = () => {
             </div>
           </div>
 
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleFileSelect} 
+            accept="image/*" 
+            className="hidden" 
+          />
+
           <button 
-            onClick={handleGenerate} 
-            disabled={state.isGenerating || !keyword} 
+            onClick={triggerUpload} 
+            disabled={state.isGenerating} 
             className={`w-full py-5 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${
-              state.isGenerating || !keyword 
+              state.isGenerating 
                 ? 'bg-slate-700 text-slate-500 cursor-not-allowed' 
                 : 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20'
             }`}
@@ -99,14 +122,14 @@ const App: React.FC = () => {
             {state.isGenerating ? (
               <div className="flex items-center gap-2">
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                <span>Generating...</span>
+                <span>Processing...</span>
               </div>
-            ) : "Generate Pixel Art"}
+            ) : "Upload & Pixelate"}
           </button>
         </div>
       </aside>
 
-      {/* Main Preview Area */}
+      {/* Main Preview Area - 디자인 원형 유지 */}
       <main className="flex-1 bg-slate-950 p-6 md:p-12 flex flex-col items-center justify-center relative min-h-[600px]">
         {state.error && (
           <div className="absolute top-10 inset-x-10 max-w-xl mx-auto bg-red-500/10 border border-red-500/30 p-4 rounded-2xl text-center backdrop-blur-md z-30 animate-in fade-in">
@@ -120,7 +143,7 @@ const App: React.FC = () => {
                 <div className="w-24 h-24 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                 <div className="text-center">
                   <span className="text-blue-500 pixel-font text-[10px] block mb-2 tracking-[0.2em]">PIXELATING...</span>
-                  <p className="text-slate-500 text-[10px] uppercase">Rendering your imagination</p>
+                  <p className="text-slate-500 text-[10px] uppercase">Refining dots and edges</p>
                 </div>
              </div>
           ) : state.resultImageUrl ? (
@@ -128,11 +151,11 @@ const App: React.FC = () => {
               <img 
                 src={state.resultImageUrl} 
                 className="w-full h-full object-contain pixelated drop-shadow-[0_0_50px_rgba(59,130,246,0.3)]" 
-                alt="Result"
+                alt="Processed Result"
               />
               <div className="absolute bottom-12 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button 
-                  onClick={() => downloadImage(state.resultImageUrl!, keyword)} 
+                  onClick={() => downloadImage(state.resultImageUrl!, keyword || 'pixel-art')} 
                   className="bg-white text-black px-12 py-4 rounded-full font-bold text-xs uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-2xl"
                 >
                   Download PNG
@@ -146,7 +169,7 @@ const App: React.FC = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
               </div>
-              <p className="font-bold uppercase tracking-[0.4em] text-[10px] text-slate-800">Ready to Create</p>
+              <p className="font-bold uppercase tracking-[0.4em] text-[10px] text-slate-800">Ready to Process</p>
             </div>
           )}
         </div>
