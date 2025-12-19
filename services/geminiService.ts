@@ -2,35 +2,52 @@
 import { GoogleGenAI } from "@google/genai";
 
 export class GeminiService {
-  private ai: GoogleGenAI;
-
-  constructor() {
-    this.ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
-  }
-
-  async generatePixelArt(keyword: string, themePrompt: string): Promise<string | null> {
-    // 마젠타(#FF00FF)는 투명도 처리를 위한 전통적인 크로마키 색상으로, 피사체와 배경의 구분을 극대화합니다.
-    const fullPrompt = `Task: Professional 2D pixel art of "${keyword}".
-
-STRICT TECHNICAL REQUIREMENTS:
-1. BACKGROUND: The background MUST be a single, solid, flat color of PURE MAGENTA (Hex: #FF00FF). No exceptions.
-2. NO MAGENTA INSIDE: Do not use magenta (#FF00FF) anywhere within the subject itself.
-3. SUBJECT INTEGRITY: The subject must be a single, solid, fully opaque object in the exact center. No personification (no eyes/limbs) unless requested.
-4. OUTLINE: The subject MUST have a thick, continuous, solid DARK outline (at least 1-2 pixels wide) to completely seal the interior from the background.
-5. NO GLOW/BLOOM: No glowing effects, no semi-transparent "light" pixels, and no anti-aliasing. Every pixel must be a solid color block.
-6. NO CONTAINERS: No circles, no badges, no frames, no ground shadows. Just the object on a flat magenta field.
-
-Style focus: ${themePrompt}. Ensure a clean, sharp, iconic look.`;
+  async generatePixelArt(
+    keyword: string, 
+    themePrompt: string, 
+    isHighQuality: boolean = false
+  ): Promise<string | null> {
+    // process.env.API_KEY에 안전하게 접근합니다.
+    // 브라우저 환경에서는 직접 접근이 제한될 수 있으므로 undefined 체크를 강화합니다.
+    let apiKey: string | undefined;
     
     try {
-      const response = await this.ai.models.generateContent({
-        model: 'gemini-2.5-flash-image',
+      apiKey = process.env.API_KEY;
+    } catch (e) {
+      apiKey = undefined;
+    }
+    
+    if (!apiKey) {
+      throw new Error("API_KEY_MISSING");
+    }
+
+    // 호출 시점에 인스턴스를 생성하여 주입된 최신 키를 사용합니다.
+    const ai = new GoogleGenAI({ apiKey });
+    
+    const modelName = isHighQuality ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
+
+    const fullPrompt = `Task: Professional 2D pixel art of a literal "${keyword}".
+
+STRICT TECHNICAL REQUIREMENTS:
+1. BACKGROUND: The background MUST be a single, solid, flat color of PURE MAGENTA (Hex: #FF00FF). 
+2. NO MAGENTA INSIDE: Ensure no magenta (#FF00FF) pixels are used inside the subject.
+3. SUBJECT INTEGRITY: The subject must be a single, solid, fully opaque inanimate object. NO eyes, NO faces, NO limbs.
+4. OUTLINE: The subject MUST have a clear, thick, solid black outline (2 pixels wide).
+5. NO GLOW: Strictly NO anti-aliasing, NO bloom, NO soft edges.
+6. NO CONTAINERS: No circles, no badges, no frames.
+
+Style focus: ${themePrompt}. Provide a sharp, iconic representation.`;
+    
+    try {
+      const response = await ai.models.generateContent({
+        model: modelName,
         contents: {
           parts: [{ text: fullPrompt }]
         },
         config: {
           imageConfig: {
-            aspectRatio: "1:1"
+            aspectRatio: "1:1",
+            ...(isHighQuality ? { imageSize: "1K" } : {})
           }
         }
       });
@@ -46,8 +63,12 @@ Style focus: ${themePrompt}. Ensure a clean, sharp, iconic look.`;
       }
 
       return null;
-    } catch (error) {
+    } catch (error: any) {
       console.error("Gemini API Error:", error);
+      // 키가 유효하지 않거나 권한이 없는 경우의 에러 처리
+      if (error.message?.includes("not found") || error.message?.includes("API key") || error.message?.includes("403")) {
+        throw new Error("API_KEY_INVALID");
+      }
       throw error;
     }
   }
