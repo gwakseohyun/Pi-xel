@@ -6,15 +6,14 @@ export class GeminiService {
     keyword: string, 
     themePrompt: string
   ): Promise<string | null> {
-    // Guidelines: Use process.env.API_KEY directly and instantiate inside the call
     const apiKey = process.env.API_KEY;
+    
+    // We only throw here if there's absolutely no key available after the UI attempt.
     if (!apiKey) {
-      throw new Error("API Key must be set when running in a browser. Please check your key configuration.");
+      throw new Error("API Key not found. Please select a key when the dialog appears.");
     }
 
     const ai = new GoogleGenAI({ apiKey });
-    
-    // Using gemini-2.5-flash-image as requested for high-performance generation
     const modelName = 'gemini-2.5-flash-image';
 
     const fullPrompt = `Create a 2D professional pixel art asset of a "${keyword}".
@@ -37,7 +36,7 @@ REQUIREMENTS:
       });
 
       if (!response.candidates?.[0]?.content?.parts) {
-        throw new Error("The API returned an empty result. This might be a safety filter block.");
+        throw new Error("Empty response from API (likely a safety filter block).");
       }
 
       for (const part of response.candidates[0].content.parts) {
@@ -46,9 +45,9 @@ REQUIREMENTS:
         }
       }
       
-      throw new Error("No image data found in response.");
+      throw new Error("No image part found in the AI response.");
     } catch (error: any) {
-      console.error("Gemini API Error:", error);
+      console.error("Gemini SDK Error:", error);
       throw error;
     }
   }
