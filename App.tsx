@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Theme, GenerationState } from './types';
 import { THEMES } from './constants';
 import { GeminiService } from './services/geminiService';
@@ -11,6 +11,7 @@ const App: React.FC = () => {
   const [resolution] = useState<number>(64);
   const [selectedTheme, setSelectedTheme] = useState<Theme>(THEMES[0]);
   const [history, setHistory] = useState<{url: string, keyword: string}[]>([]);
+  const [hasKey, setHasKey] = useState<boolean>(true);
   
   const [state, setState] = useState<GenerationState>({
     isGenerating: false,
@@ -21,12 +22,36 @@ const App: React.FC = () => {
 
   const geminiService = useRef(new GeminiService());
 
+  // API 키 선택 상태 체크
+  useEffect(() => {
+    const checkKey = async () => {
+      if (window.aistudio) {
+        const selected = await window.aistudio.hasSelectedApiKey();
+        setHasKey(selected || !!process.env.API_KEY);
+      }
+    };
+    checkKey();
+  }, []);
+
+  const handleConnectKey = async () => {
+    if (window.aistudio) {
+      await window.aistudio.openSelectKey();
+      setHasKey(true);
+      setState(prev => ({ ...prev, error: null }));
+    }
+  };
+
   const handleDownload = (url: string, kw: string) => {
     downloadImage(url, `pixel-art-${kw.replace(/\s+/g, '-').toLowerCase()}.png`);
   };
 
   const handleGenerate = async () => {
     if (!keyword.trim()) return;
+
+    // 키가 없는 경우 선택창 유도
+    if (!hasKey && window.aistudio) {
+      await handleConnectKey();
+    }
 
     setState(prev => ({ ...prev, isGenerating: true, error: null }));
 
@@ -48,13 +73,15 @@ const App: React.FC = () => {
       }
     } catch (err: any) {
       let errorMessage = "Generation failed.";
+      const msg = err.message || "";
       
-      if (err.message === "API_KEY_INVALID" || err.message?.includes("not found")) {
-        errorMessage = "Invalid API Key or project configuration. Please check your environment variables.";
-      } else if (err.message === "BILLING_REQUIRED") {
-        errorMessage = "API quota exceeded or billing required. Please check your Google AI Studio account.";
+      if (msg.includes("API Key must be set") || msg.includes("not found") || msg.includes("401")) {
+        errorMessage = "API 키가 설정되지 않았거나 유효하지 않습니다. 아래 버튼을 눌러 키를 연결해주세요.";
+        setHasKey(false);
+      } else if (msg.includes("BILLING_REQUIRED") || msg.includes("quota")) {
+        errorMessage = "API 할당량이 부족하거나 결제가 필요합니다. (Paid GCP Project 필요)";
       } else {
-        errorMessage = err.message || "An unexpected error occurred.";
+        errorMessage = msg || "알 수 없는 오류가 발생했습니다.";
       }
 
       setState(prev => ({
@@ -72,6 +99,28 @@ const App: React.FC = () => {
           <h1 className="pixel-font text-2xl text-blue-400">Pi-XEL</h1>
           <p className="text-slate-500 text-[10px] mt-1 uppercase tracking-widest">AI Pixel Art Generator</p>
         </div>
+
+        {!hasKey && (
+          <div className="mb-8 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+            <p className="text-amber-400 text-[11px] mb-3 leading-relaxed font-semibold">
+              브라우저 환경에서 API 실행을 위해 키 연결이 필요합니다.
+            </p>
+            <button 
+              onClick={handleConnectKey}
+              className="w-full py-2 bg-amber-500 hover:bg-amber-400 text-slate-900 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+              Google API 키 연결하기
+            </button>
+            <a 
+              href="https://ai.google.dev/gemini-api/docs/billing" 
+              target="_blank" 
+              className="block text-center mt-2 text-[9px] text-slate-500 underline"
+            >
+              Billing Documentation 안내
+            </a>
+          </div>
+        )}
 
         <div className="space-y-8">
           <div>
@@ -120,7 +169,7 @@ const App: React.FC = () => {
 
       <main className="flex-1 bg-slate-950 p-6 md:p-12 flex flex-col items-center justify-center relative min-h-[500px]">
         {state.error && (
-          <div className="absolute top-10 inset-x-10 max-w-2xl mx-auto bg-red-500/10 border border-red-500/30 p-5 rounded-2xl text-center backdrop-blur-md">
+          <div className="absolute top-10 inset-x-10 max-w-2xl mx-auto bg-red-500/10 border border-red-500/30 p-5 rounded-2xl text-center backdrop-blur-md z-30">
             <p className="text-red-400 text-sm font-bold">{state.error}</p>
           </div>
         )}
