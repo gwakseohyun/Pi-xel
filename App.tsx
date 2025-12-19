@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Theme, GenerationState } from './types';
 import { THEMES } from './constants';
-import { generatePixelArtImage } from './services/geminiService';
+import generatePixelArtImage from './services/geminiService';
 import { processPixelArt, downloadImage } from './utils/imageUtils';
 import ThemeCard from './components/ThemeCard';
 
@@ -25,13 +25,13 @@ const App: React.FC = () => {
     setState(prev => ({ ...prev, isGenerating: true, error: null }));
 
     try {
-      // 보이지 않는 시스템 키를 사용하여 즉시 생성
+      // 시스템 API 키를 사용하여 즉시 이미지 생성
       const rawImage = await generatePixelArtImage(
         keyword,
         selectedTheme.promptSuffix
       );
 
-      // 픽셀 가공 처리
+      // 마젠타 배경 제거 및 도트 보정 처리
       const processedImage = await processPixelArt(rawImage, resolution);
       
       setState(prev => ({
@@ -47,14 +47,14 @@ const App: React.FC = () => {
       setState(prev => ({ 
         ...prev, 
         isGenerating: false, 
-        error: err.message || "생성에 실패했습니다." 
+        error: err.message || "생성 중 오류가 발생했습니다." 
       }));
     }
   };
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col md:flex-row font-sans overflow-hidden">
-      {/* Sidebar UI */}
+      {/* Sidebar Section */}
       <aside className="w-full md:w-[400px] bg-slate-800 border-r border-slate-700 p-6 overflow-y-auto z-20 shadow-xl">
         <div className="mb-10">
           <h1 className="pixel-font text-2xl text-blue-400 tracking-tighter">Pi-XEL</h1>
@@ -63,18 +63,18 @@ const App: React.FC = () => {
 
         <div className="space-y-8">
           <div>
-            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2 tracking-widest">What to Draw?</label>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2 tracking-widest">Keyword (English)</label>
             <input 
               type="text" 
               value={keyword} 
               onChange={(e) => setKeyword(e.target.value)} 
-              placeholder="e.g. Cyberpunk Sword" 
+              placeholder="e.g. Red Dragon" 
               className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-4 focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-200 transition-all placeholder:text-slate-700" 
             />
           </div>
 
           <div>
-            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-3 tracking-widest">Art Style</label>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-3 tracking-widest">Choose Style</label>
             <div className="grid grid-cols-2 gap-3">
               {THEMES.map(t => (
                 <ThemeCard 
@@ -93,23 +93,23 @@ const App: React.FC = () => {
             className={`w-full py-5 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${
               state.isGenerating || !keyword 
                 ? 'bg-slate-700 text-slate-500 cursor-not-allowed' 
-                : 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg'
+                : 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20'
             }`}
           >
             {state.isGenerating ? (
               <div className="flex items-center gap-2">
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                <span>Generating...</span>
+                <span>Creating...</span>
               </div>
             ) : "Generate Pixel Art"}
           </button>
         </div>
       </aside>
 
-      {/* Main Preview Area */}
+      {/* Main Preview Section */}
       <main className="flex-1 bg-slate-950 p-6 md:p-12 flex flex-col items-center justify-center relative min-h-[600px]">
         {state.error && (
-          <div className="absolute top-10 inset-x-10 max-w-xl mx-auto bg-red-500/10 border border-red-500/30 p-4 rounded-2xl text-center backdrop-blur-md z-30">
+          <div className="absolute top-10 inset-x-10 max-w-xl mx-auto bg-red-500/10 border border-red-500/30 p-4 rounded-2xl text-center backdrop-blur-md z-30 animate-in fade-in duration-300">
             <p className="text-red-400 text-[10px] font-bold uppercase tracking-wider">{state.error}</p>
           </div>
         )}
@@ -120,7 +120,7 @@ const App: React.FC = () => {
                 <div className="w-24 h-24 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                 <div className="text-center">
                   <span className="text-blue-500 pixel-font text-[10px] block mb-2 tracking-[0.2em]">PIXELATING...</span>
-                  <p className="text-slate-500 text-[10px] uppercase">Rendering dots</p>
+                  <p className="text-slate-500 text-[10px] uppercase">Translating words to dots</p>
                 </div>
              </div>
           ) : state.resultImageUrl ? (
@@ -135,7 +135,7 @@ const App: React.FC = () => {
                   onClick={() => downloadImage(state.resultImageUrl!, keyword)} 
                   className="bg-white text-black px-12 py-4 rounded-full font-bold text-xs uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-2xl"
                 >
-                  Download Image
+                  Download PNG
                 </button>
               </div>
             </div>
@@ -151,7 +151,7 @@ const App: React.FC = () => {
           )}
         </div>
 
-        {/* History Bar */}
+        {/* History Gallery */}
         {history.length > 0 && (
           <div className="mt-20 w-full max-w-4xl animate-in fade-in slide-in-from-bottom-8">
             <h3 className="text-[10px] font-bold text-slate-700 uppercase tracking-[0.3em] mb-8 text-center">Recent Creations</h3>
@@ -162,7 +162,7 @@ const App: React.FC = () => {
                   className="w-24 h-24 flex-shrink-0 bg-slate-900/50 rounded-2xl p-3 border border-slate-800 hover:border-blue-500/50 transition-all group"
                   onClick={() => setState(prev => ({ ...prev, resultImageUrl: item.url }))}
                 >
-                  <img src={item.url} className="w-full h-full object-contain pixelated group-hover:scale-110 transition-transform" alt="History" />
+                  <img src={item.url} className="w-full h-full object-contain pixelated group-hover:scale-110 transition-transform" alt="History Item" />
                 </button>
               ))}
             </div>
