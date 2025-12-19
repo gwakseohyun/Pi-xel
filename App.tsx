@@ -22,17 +22,16 @@ const App: React.FC = () => {
   const handleGenerate = async () => {
     if (!keyword.trim()) return;
 
-    // 초기화 및 로딩 시작
     setState(prev => ({ ...prev, isGenerating: true, error: null }));
 
     try {
-      // 보이지 않는 곳에서 API를 호출하여 결과를 가져옵니다.
+      // 보이지 않는 시스템 키를 사용하여 즉시 생성
       const rawImage = await generatePixelArtImage(
         keyword,
         selectedTheme.promptSuffix
       );
 
-      // 가져온 이미지를 실제 픽셀 아트처럼 가공 (배경 제거 및 해상도 조정)
+      // 픽셀 가공 처리
       const processedImage = await processPixelArt(rawImage, resolution);
       
       setState(prev => ({
@@ -42,10 +41,9 @@ const App: React.FC = () => {
         originalResult: rawImage
       }));
       
-      // 최근 내역 추가
       setHistory(prev => [{url: processedImage, keyword}, ...prev].slice(0, 8));
     } catch (err: any) {
-      console.error("Generation Error:", err);
+      console.error("Generation Flow Error:", err);
       setState(prev => ({ 
         ...prev, 
         isGenerating: false, 
@@ -56,7 +54,7 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col md:flex-row font-sans overflow-hidden">
-      {/* Sidebar Section */}
+      {/* Sidebar UI */}
       <aside className="w-full md:w-[400px] bg-slate-800 border-r border-slate-700 p-6 overflow-y-auto z-20 shadow-xl">
         <div className="mb-10">
           <h1 className="pixel-font text-2xl text-blue-400 tracking-tighter">Pi-XEL</h1>
@@ -108,7 +106,7 @@ const App: React.FC = () => {
         </div>
       </aside>
 
-      {/* Main Preview Section */}
+      {/* Main Preview Area */}
       <main className="flex-1 bg-slate-950 p-6 md:p-12 flex flex-col items-center justify-center relative min-h-[600px]">
         {state.error && (
           <div className="absolute top-10 inset-x-10 max-w-xl mx-auto bg-red-500/10 border border-red-500/30 p-4 rounded-2xl text-center backdrop-blur-md z-30">
@@ -153,7 +151,7 @@ const App: React.FC = () => {
           )}
         </div>
 
-        {/* Recent History Bar */}
+        {/* History Bar */}
         {history.length > 0 && (
           <div className="mt-20 w-full max-w-4xl animate-in fade-in slide-in-from-bottom-8">
             <h3 className="text-[10px] font-bold text-slate-700 uppercase tracking-[0.3em] mb-8 text-center">Recent Creations</h3>
