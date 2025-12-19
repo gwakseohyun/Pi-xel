@@ -6,7 +6,7 @@ export class GeminiService {
     keyword: string, 
     themePrompt: string
   ): Promise<string | null> {
-    // API 연결 로직은 유지하며, 모델만 기본 모델로 고정합니다.
+    // 매 호출마다 새로운 인스턴스를 생성하여 선택된 최신 API 키를 반영합니다.
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const modelName = 'gemini-2.5-flash-image';
 
@@ -36,14 +36,6 @@ STRICT TECHNICAL REQUIREMENTS:
       return null;
     } catch (error: any) {
       console.error("Gemini API Error:", error);
-      const msg = error.message || "";
-      
-      if (msg.includes("403") || msg.includes("402") || msg.includes("billing")) {
-        throw new Error("BILLING_REQUIRED");
-      }
-      if (msg.includes("401") || msg.includes("not found") || msg.includes("key")) {
-        throw new Error("API_KEY_INVALID");
-      }
       throw error;
     }
   }
