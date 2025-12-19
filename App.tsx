@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Theme, GenerationState } from './types';
 import { THEMES } from './constants';
 import { GeminiService } from './services/geminiService';
@@ -10,6 +10,7 @@ const App: React.FC = () => {
   const [keyword, setKeyword] = useState('');
   const [resolution, setResolution] = useState<number>(64);
   const [selectedTheme, setSelectedTheme] = useState<Theme>(THEMES[0]);
+  const [isHighQuality, setIsHighQuality] = useState(false);
   const [history, setHistory] = useState<{url: string, keyword: string}[]>([]);
   
   const [state, setState] = useState<GenerationState>({
@@ -21,8 +22,48 @@ const App: React.FC = () => {
 
   const geminiService = useRef(new GeminiService());
 
+  // 앱 시작 시 API 키가 있는지 확인하고 없으면 안내합니다.
+  useEffect(() => {
+    const checkKey = async () => {
+      // @ts-ignore
+      if (window.aistudio && !(await window.aistudio.hasSelectedApiKey())) {
+        console.log("No API key detected. User needs to select one.");
+      }
+    };
+    checkKey();
+  }, []);
+
+  const promptKeySelection = async () => {
+    // @ts-ignore
+    if (window.aistudio) {
+      // @ts-ignore
+      await window.aistudio.openSelectKey();
+      // 키 선택 후 바로 실행할 수 있도록 상태 초기화
+      setState(prev => ({ ...prev, error: null }));
+      return true;
+    }
+    return false;
+  };
+
   const handleGenerate = async () => {
     if (!keyword.trim()) return;
+
+    let currentApiKey: string | undefined;
+    try {
+      currentApiKey = process.env.API_KEY;
+    } catch (e) {
+      currentApiKey = undefined;
+    }
+
+    // 키가 아예 없는 경우 (Vercel 환경변수가 클라이언트에 노출되지 않았을 때)
+    if (!currentApiKey) {
+      const bridgeOpened = await promptKeySelection();
+      if (!bridgeOpened) {
+        setState(prev => ({ ...prev, error: "API Key is missing. Please provide it via the key icon." }));
+        return;
+      }
+      // bridge가 열렸다면 사용자가 키를 선택할 것으로 기대하고 진행 시도 (Race condition 방지 위해 잠시 대기하지 않고 흐름 유지)
+    }
 
     const resValue = Math.max(8, Math.min(256, resolution));
     setResolution(resValue);
@@ -32,7 +73,8 @@ const App: React.FC = () => {
     try {
       const rawImage = await geminiService.current.generatePixelArt(
         keyword,
-        selectedTheme.promptSuffix
+        selectedTheme.promptSuffix,
+        isHighQuality
       );
 
       if (rawImage) {
@@ -50,20 +92,24 @@ const App: React.FC = () => {
           return newHistory.slice(0, 8);
         });
 
-        // Scroll to result on mobile after generation
         if (window.innerWidth < 768) {
           setTimeout(() => {
             document.getElementById('result-area')?.scrollIntoView({ behavior: 'smooth' });
           }, 100);
         }
-      } else {
-        throw new Error("No image data returned from AI.");
       }
     } catch (err: any) {
+      let errorMessage = err.message;
+      
+      if (errorMessage === "API_KEY_MISSING" || errorMessage === "API_KEY_INVALID") {
+        errorMessage = "API key issue! Please click the key icon to select a valid key.";
+        await promptKeySelection();
+      }
+
       setState(prev => ({
         ...prev,
         isGenerating: false,
-        error: err.message || "Failed to generate pixel art. Please try again."
+        error: errorMessage || "Something went wrong. Please try again."
       }));
     }
   };
@@ -74,33 +120,50 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col md:flex-row">
-      {/* Sidebar Controls */}
       <aside className="w-full md:w-[400px] md:h-screen md:sticky md:top-0 bg-slate-800 border-b md:border-b-0 md:border-r border-slate-700 p-6 sm:p-8 overflow-y-auto">
-        <div className="mb-8 md:mb-12">
-          <h1 className="pixel-font text-2xl md:text-3xl text-blue-400 mb-2 tracking-tighter">Pi-XEL</h1>
-          <p className="text-slate-400 text-xs md:text-sm">Convert words into pixels</p>
+        <div className="mb-8 md:mb-12 flex justify-between items-start">
+          <div>
+            <h1 className="pixel-font text-2xl md:text-3xl text-blue-400 mb-2 tracking-tighter">Pi-XEL</h1>
+            <p className="text-slate-400 text-xs md:text-sm">English words to pixel art</p>
+          </div>
+          <button 
+            onClick={promptKeySelection}
+            className="p-2 bg-blue-600/20 hover:bg-blue-600/40 border border-blue-500/30 rounded-lg transition-all group"
+            title="Setup API Key"
+          >
+            <svg className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+            </svg>
+          </button>
         </div>
 
-        <div className="space-y-8 md:space-y-10">
-          {/* Input Section */}
+        <div className="space-y-6 md:space-y-8">
           <div>
-            <label className="block text-[10px] md:text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">
-              KEYWORD
-            </label>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">KEYWORD</label>
             <input
               type="text"
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
-              placeholder="e.g., Space Cat, Sword, Potion"
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 md:py-4 focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-200 placeholder-slate-600 text-sm md:text-base"
+              placeholder="e.g., Red Dragon, Magic Orb"
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 md:py-4 focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-200"
             />
           </div>
 
-          {/* Resolution Selection */}
+          <div className="flex items-center justify-between p-3 bg-slate-900/50 rounded-xl border border-slate-700 shadow-inner">
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold text-slate-400 uppercase">Quality Mode</span>
+              <span className="text-[9px] text-slate-500">Enable Gemini 3 Pro</span>
+            </div>
+            <button 
+              onClick={() => setIsHighQuality(!isHighQuality)}
+              className={`w-12 h-6 rounded-full transition-colors relative ${isHighQuality ? 'bg-blue-600' : 'bg-slate-700'}`}
+            >
+              <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${isHighQuality ? 'left-7' : 'left-1'}`}></div>
+            </button>
+          </div>
+
           <div>
-            <label className="block text-[10px] md:text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">
-              RESOLUTION (8 - 256)
-            </label>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">RESOLUTION</label>
             <div className="flex items-center gap-3">
                <input
                 type="number"
@@ -108,18 +171,15 @@ const App: React.FC = () => {
                 max="256"
                 value={resolution}
                 onChange={(e) => setResolution(parseInt(e.target.value) || 0)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 md:py-4 focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-200 text-sm md:text-base [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-200"
               />
-              <span className="text-slate-500 font-bold px-2 whitespace-nowrap text-sm">px</span>
+              <span className="text-slate-500 font-bold px-2 text-sm">px</span>
             </div>
           </div>
 
-          {/* Themes Selection */}
           <div>
-            <label className="block text-[10px] md:text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">
-              Select Theme
-            </label>
-            <div className="grid grid-cols-2 gap-3 md:gap-4">
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Style Themes</label>
+            <div className="grid grid-cols-2 gap-3">
               {THEMES.map((theme) => (
                 <ThemeCard
                   key={theme.id}
@@ -131,93 +191,61 @@ const App: React.FC = () => {
             </div>
           </div>
 
-          {/* Action Button */}
-          <div className="pt-4 pb-4 md:pb-0">
-            <button
-              onClick={handleGenerate}
-              disabled={state.isGenerating || !keyword}
-              className={`w-full py-4 md:py-5 rounded-2xl font-bold text-sm md:text-base flex items-center justify-center gap-3 transition-all ${
-                state.isGenerating || !keyword
-                  ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                  : 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-900/40 active:scale-[0.98]'
-              }`}
-            >
-              {state.isGenerating ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                  Generating...
-                </>
-              ) : (
-                'Generate Art'
-              )}
-            </button>
-          </div>
+          <button
+            onClick={handleGenerate}
+            disabled={state.isGenerating || !keyword}
+            className={`w-full py-4 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all ${
+              state.isGenerating || !keyword
+                ? 'bg-slate-700 text-slate-500'
+                : 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg active:scale-[0.98]'
+            }`}
+          >
+            {state.isGenerating ? <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>Processing...</> : 'Generate Pixels'}
+          </button>
         </div>
       </aside>
 
-      {/* Main Canvas Area */}
-      <main className="flex-1 flex flex-col bg-slate-900 p-6 sm:p-10 md:p-12 min-h-[500px]">
+      <main className="flex-1 flex flex-col bg-slate-950 p-6 md:p-12 min-h-[500px]">
         <div id="result-area" className="flex-1 flex items-center justify-center relative py-12">
           {state.error && (
-            <div className="absolute top-0 left-0 right-0 bg-red-500/10 border border-red-500/50 text-red-400 p-4 rounded-xl text-sm text-center animate-in fade-in slide-in-from-top-4 duration-300">
-              {state.error}
+            <div className="absolute top-0 left-0 right-0 bg-red-500/10 border border-red-500/30 text-red-400 p-4 rounded-xl text-sm text-center animate-in fade-in slide-in-from-top-2">
+              <p className="font-medium">{state.error}</p>
+              <button onClick={promptKeySelection} className="mt-2 text-blue-400 hover:text-blue-300 underline font-bold decoration-2 underline-offset-4">
+                [ Click here to setup API Key ]
+              </button>
             </div>
           )}
 
           {!state.resultImageUrl && !state.isGenerating && (
-            <div className="text-center px-4">
-              <div className="w-24 h-24 md:w-32 md:h-32 border-4 border-dashed border-slate-800 rounded-3xl mx-auto mb-6 flex items-center justify-center">
-                <svg className="w-10 h-10 md:w-12 md:h-12 text-slate-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
+            <div className="text-center group">
+              <div className="w-32 h-32 border-4 border-dashed border-slate-800 rounded-3xl mx-auto mb-8 flex items-center justify-center group-hover:border-slate-700 transition-colors">
+                <svg className="w-12 h-12 text-slate-800 group-hover:text-slate-700 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
               </div>
-              <h2 className="text-slate-600 font-bold text-lg md:text-xl">Your pixels await...</h2>
-              <p className="text-slate-700 text-xs md:text-sm mt-2">Enter a keyword and hit generate</p>
+              <h2 className="text-slate-600 font-bold tracking-widest text-sm uppercase">Enter a keyword to begin</h2>
             </div>
           )}
 
           {state.isGenerating && (
             <div className="flex flex-col items-center">
-              <div className="w-48 h-48 md:w-64 md:h-64 bg-slate-800 rounded-2xl animate-pulse flex items-center justify-center border-2 border-slate-700 relative overflow-hidden">
+              <div className="w-56 h-56 md:w-72 md:h-72 bg-slate-900 rounded-3xl animate-pulse flex items-center justify-center border-2 border-slate-800 relative overflow-hidden">
                 <div className="absolute inset-0 bg-gradient-to-t from-blue-500/10 to-transparent"></div>
-                <div className="text-slate-600 text-[10px] md:text-xs pixel-font animate-bounce">PIXELATING...</div>
+                <div className="text-blue-500/50 text-[10px] pixel-font animate-bounce uppercase">Rendering...</div>
               </div>
             </div>
           )}
 
           {state.resultImageUrl && !state.isGenerating && (
-            <div className="flex flex-col items-center w-full max-w-sm md:max-w-md">
-              <div className="relative group p-3 md:p-4 bg-slate-800 rounded-3xl shadow-2xl border border-slate-700 w-full aspect-square flex items-center justify-center">
-                <div className="absolute inset-3 md:inset-4 rounded-xl overflow-hidden pointer-events-none opacity-20">
-                  <div className="w-full h-full bg-[radial-gradient(#475569_1px,transparent_1px)] [background-size:8px_8px]"></div>
-                </div>
-
-                <img
-                  src={state.resultImageUrl}
-                  alt="Pixel Art Result"
-                  className="w-full h-full object-contain pixelated relative z-10 transition-transform group-hover:scale-[1.02]"
-                />
-
-                <div className="absolute -bottom-16 md:-bottom-12 flex flex-col sm:flex-row gap-3 w-full justify-center px-4">
-                  <button
-                    onClick={() => handleDownload(state.resultImageUrl!, keyword)}
-                    className="bg-green-600 hover:bg-green-500 text-white px-6 py-3 rounded-full font-bold shadow-lg flex items-center justify-center gap-2 transition-all active:scale-95 text-sm md:text-base order-1"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
+            <div className="flex flex-col items-center w-full max-w-sm md:max-w-md animate-in zoom-in-95 duration-500">
+              <div className="relative p-4 md:p-6 bg-slate-900 rounded-[2.5rem] shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-slate-800 w-full aspect-square flex items-center justify-center overflow-hidden group">
+                <div className="absolute inset-0 bg-[radial-gradient(#1e293b_1.5px,transparent_1.5px)] [background-size:24px_24px] opacity-20 group-hover:opacity-40 transition-opacity"></div>
+                <img src={state.resultImageUrl} alt="Result" className="w-full h-full object-contain pixelated relative z-10 drop-shadow-[0_0_20px_rgba(59,130,246,0.3)]" />
+                
+                <div className="absolute -bottom-16 md:-bottom-14 flex flex-col sm:flex-row gap-3 w-full justify-center px-4">
+                  <button onClick={() => handleDownload(state.resultImageUrl!, keyword)} className="bg-blue-600 hover:bg-blue-500 text-white px-10 py-3.5 rounded-full font-bold shadow-xl transition-all active:scale-95 text-sm ring-4 ring-blue-600/20">
                     Download PNG
                   </button>
-                  <button
-                    onClick={() => {
-                      if (state.originalResult) {
-                         const win = window.open();
-                         win?.document.write(`<img src="${state.originalResult}" style="max-width: 100%; height: auto;"/>`);
-                      }
-                    }}
-                    className="bg-slate-700 hover:bg-slate-600 text-slate-300 px-6 py-3 rounded-full text-sm font-semibold transition-all order-2"
-                  >
-                    View Original
+                  <button onClick={() => { if (state.originalResult) { const win = window.open(); win?.document.write(`<body style="margin:0;display:flex;justify-content:center;align-items:center;background:#000;height:100vh"><img src="${state.originalResult}" style="max-height:90%; image-rendering: pixelated;"/></body>`); } }} className="bg-slate-800 hover:bg-slate-700 text-slate-400 px-6 py-3.5 rounded-full text-xs font-bold transition-all">
+                    Show AI RAW
                   </button>
                 </div>
               </div>
@@ -225,47 +253,18 @@ const App: React.FC = () => {
           )}
         </div>
 
-        {/* Recent History / Gallery */}
-        <div className="mt-12 md:mt-auto pt-8 border-t border-slate-800">
-          <h3 className="text-[10px] md:text-xs font-semibold text-slate-600 uppercase tracking-widest mb-4">Recent Creations</h3>
-          <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide snap-x">
-            {history.length === 0 ? (
-              <p className="text-slate-700 text-xs italic">No history yet</p>
-            ) : (
-              history.map((item, idx) => (
-                <div 
-                  key={idx} 
-                  className="group relative w-16 h-16 md:w-20 md:h-20 flex-shrink-0 bg-slate-800 rounded-xl p-2 border border-slate-700 hover:border-blue-500/50 transition-colors snap-start"
-                >
-                  <img 
-                    src={item.url} 
-                    className="w-full h-full object-contain pixelated cursor-pointer" 
-                    alt={`History ${idx}`} 
-                    onClick={() => {
-                      setState(prev => ({ ...prev, resultImageUrl: item.url, error: null, originalResult: null }));
-                      document.getElementById('result-area')?.scrollIntoView({ behavior: 'smooth' });
-                    }}
-                  />
-                  {/* Hover Download Button - larger touch area for mobile */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDownload(item.url, item.keyword);
-                    }}
-                    className="absolute top-0 right-0 w-8 h-8 bg-black/60 hover:bg-black/90 text-white rounded-tr-xl rounded-bl-xl flex items-center justify-center opacity-0 md:group-hover:opacity-100 transition-opacity z-20"
-                    title="Download this image"
-                  >
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
-                  </button>
-                  {/* Visible download button for mobile as hover doesn't exist */}
-                  <div className="md:hidden absolute -bottom-1 -right-1">
-                    <div className="bg-blue-500 w-4 h-4 rounded-full border-2 border-slate-800"></div>
-                  </div>
-                </div>
-              ))
-            )}
+        <div className="mt-16 md:mt-auto pt-10 border-t border-slate-900/50">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-[10px] font-bold text-slate-600 uppercase tracking-[0.2em]">Recent Collection</h3>
+            <span className="text-[10px] text-slate-700">{history.length}/8 Slots</span>
+          </div>
+          <div className="flex gap-5 overflow-x-auto pb-6 scrollbar-hide">
+            {history.map((item, idx) => (
+              <div key={idx} className="group relative w-20 h-20 md:w-24 md:h-24 flex-shrink-0 bg-slate-900 rounded-2xl p-3 border border-slate-800 hover:border-blue-500/50 transition-all cursor-pointer hover:-translate-y-1" onClick={() => setState(prev => ({ ...prev, resultImageUrl: item.url, error: null, originalResult: null }))}>
+                <img src={item.url} className="w-full h-full object-contain pixelated group-hover:scale-110 transition-transform" alt="Collection" />
+                <div className="absolute inset-x-0 -bottom-2 h-1 bg-blue-500 scale-x-0 group-hover:scale-x-100 transition-transform rounded-full"></div>
+              </div>
+            ))}
           </div>
         </div>
       </main>
