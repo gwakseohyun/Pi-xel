@@ -2,47 +2,47 @@
 import { GoogleGenAI } from "@google/genai";
 
 /**
- * 픽셀 아트를 생성하는 핵심 엔진입니다.
- * 시스템 환경 변수(process.env.API_KEY)를 직접 사용하여 사용자의 개입 없이 작동합니다.
+ * 픽셀 아트를 생성하는 핵심 함수입니다.
+ * 시스템의 process.env.API_KEY를 사용하여 보안을 유지하며 자동 연동됩니다.
  */
-export const generatePixelArtImage = async (keyword: string, themePrompt: string): Promise<string> => {
-  // 시스템 주입 키 사용
+const generatePixelArtImage = async (keyword: string, themePrompt: string): Promise<string> => {
   const apiKey = process.env.API_KEY;
   
   if (!apiKey) {
-    throw new Error("API_KEY 환경 변수가 설정되지 않았습니다.");
+    throw new Error("API_KEY가 설정되지 않았습니다. 관리자 설정을 확인해 주세요.");
   }
 
   const ai = new GoogleGenAI({ apiKey });
-  const modelName = 'gemini-2.5-flash-image';
+  // 고화질 이미지 생성을 위해 지정된 모델을 사용합니다.
+  const model = 'gemini-2.5-flash-image';
 
   const prompt = `Create a 2D professional pixel art asset of a "${keyword}".
 STYLE: ${themePrompt}.
 REQUIREMENTS:
 1. BACKGROUND: MUST be a flat solid Magenta (#FF00FF).
-2. PERSPECTIVE: Flat 2D view (side or top).
+2. PERSPECTIVE: Flat 2D view.
 3. OUTLINE: Clear black borders.
-4. QUALITY: Sharp pixels, no blur.`;
+4. QUALITY: Sharp pixels, strictly 2D.`;
 
   try {
     const response = await ai.models.generateContent({
-      model: modelName,
+      model,
       contents: { parts: [{ text: prompt }] },
       config: {
-        imageConfig: {
-          aspectRatio: "1:1"
-        }
+        imageConfig: { aspectRatio: "1:1" }
       }
     });
 
     const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
     if (!part?.inlineData) {
-      throw new Error("이미지 생성 결과가 없습니다. 다시 시도해 주세요.");
+      throw new Error("이미지 생성 응답이 없습니다.");
     }
 
     return `data:image/png;base64,${part.inlineData.data}`;
   } catch (error: any) {
     console.error("Gemini API Error:", error);
-    throw new Error(error.message || "API 호출 중 오류가 발생했습니다.");
+    throw new Error(error.message || "API 연결 실패");
   }
 };
+
+export default generatePixelArtImage;
