@@ -27,26 +27,8 @@ const App: React.FC = () => {
     setState(prev => ({ ...prev, isGenerating: true, error: null }));
 
     try {
-      // 1. API 키 획득 (브릿지 우선 순위)
-      let currentKey = process.env.API_KEY;
-
-      if (window.aistudio) {
-        const hasKey = await window.aistudio.hasSelectedApiKey();
-        if (!hasKey) {
-          await window.aistudio.openSelectKey();
-          // 키 선택 창이 뜬 직후에는 주입된 키를 사용하도록 잠시 대기하거나 재시도 유도
-          // 여기서는 지침에 따라 즉시 진행하며 주입된 process.env.API_KEY를 다시 확인합니다.
-          currentKey = process.env.API_KEY;
-        }
-      }
-
-      if (!currentKey) {
-        throw new Error("API 키를 찾을 수 없습니다. 키 선택 창에서 키를 선택해 주세요.");
-      }
-
-      // 2. 생성 시도 (확인된 키를 직접 전달)
+      // 복잡한 브릿지 체크 없이 바로 서비스를 호출합니다.
       const rawImage = await geminiService.current.generatePixelArt(
-        currentKey,
         keyword,
         selectedTheme.promptSuffix
       );
@@ -62,21 +44,16 @@ const App: React.FC = () => {
         setHistory(prev => [{url: processedImage, keyword}, ...prev].slice(0, 8));
       }
     } catch (err: any) {
-      console.error("HandleGenerate Error:", err);
-      const rawMsg = err.message || String(err);
-      
-      let displayMsg = `에러: ${rawMsg}`;
-      if (rawMsg.includes("401") || rawMsg.includes("API key")) {
-        displayMsg = "인증 에러가 발생했습니다. 키 선택 버튼을 눌러 유효한 키를 다시 선택해 주세요.";
-        if (window.aistudio) window.aistudio.openSelectKey();
-      }
-
-      setState(prev => ({ ...prev, isGenerating: false, error: displayMsg }));
+      console.error("HandleGenerate Exception:", err);
+      // 실제 에러 메시지를 그대로 노출하여 문제 원인을 파악합니다.
+      const displayMsg = err.message || String(err);
+      setState(prev => ({ ...prev, isGenerating: false, error: `발생한 에러: ${displayMsg}` }));
     }
   };
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col md:flex-row font-sans">
+      {/* Sidebar UI 보존 */}
       <aside className="w-full md:w-[400px] bg-slate-800 border-r border-slate-700 p-6 overflow-y-auto z-20 shadow-xl">
         <div className="mb-10">
           <h1 className="pixel-font text-2xl text-blue-400 tracking-tighter">Pi-XEL</h1>
@@ -128,6 +105,7 @@ const App: React.FC = () => {
         </div>
       </aside>
 
+      {/* Main Content UI 보존 */}
       <main className="flex-1 bg-slate-950 p-6 md:p-12 flex flex-col items-center justify-center relative min-h-[600px]">
         {state.error && (
           <div className="absolute top-10 inset-x-10 max-w-xl mx-auto bg-red-500/10 border border-red-500/30 p-4 rounded-2xl text-center backdrop-blur-md z-30 animate-in fade-in zoom-in-95">
