@@ -6,14 +6,15 @@ export class GeminiService {
     keyword: string, 
     themePrompt: string
   ): Promise<string | null> {
+    // 호출 시점에 환경 변수에서 키를 직접 가져옵니다.
     const apiKey = process.env.API_KEY;
     
-    // We only throw here if there's absolutely no key available after the UI attempt.
     if (!apiKey) {
-      throw new Error("API Key not found. Please select a key when the dialog appears.");
+      throw new Error("API_KEY_NOT_FOUND");
     }
 
     const ai = new GoogleGenAI({ apiKey });
+    // 사용자의 요청대로 무료 티어에서 안정적인 gemini-2.5-flash-image 모델을 사용합니다.
     const modelName = 'gemini-2.5-flash-image';
 
     const fullPrompt = `Create a 2D professional pixel art asset of a "${keyword}".
@@ -36,7 +37,7 @@ REQUIREMENTS:
       });
 
       if (!response.candidates?.[0]?.content?.parts) {
-        throw new Error("Empty response from API (likely a safety filter block).");
+        throw new Error("SAFETY_OR_EMPTY");
       }
 
       for (const part of response.candidates[0].content.parts) {
@@ -45,9 +46,18 @@ REQUIREMENTS:
         }
       }
       
-      throw new Error("No image part found in the AI response.");
+      throw new Error("NO_IMAGE_DATA");
     } catch (error: any) {
-      console.error("Gemini SDK Error:", error);
+      console.error("Gemini SDK Detailed Error:", error);
+      // 서버 에러 메시지에 따른 세분화된 에러 처리
+      const msg = error.message || String(error);
+      if (msg.includes("401") || msg.includes("API key not valid")) {
+        throw new Error("INVALID_API_KEY");
+      } else if (msg.includes("404") || msg.includes("not found")) {
+        throw new Error("MODEL_OR_PROJECT_NOT_FOUND");
+      } else if (msg.includes("429")) {
+        throw new Error("RATE_LIMIT_EXCEEDED");
+      }
       throw error;
     }
   }
