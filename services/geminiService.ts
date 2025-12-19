@@ -2,14 +2,15 @@
 import { GoogleGenAI } from "@google/genai";
 
 export class GeminiService {
-  // 호출 시점에 외부에서 검증된 키를 전달받습니다.
   async generatePixelArt(
-    apiKey: string,
     keyword: string, 
     themePrompt: string
   ): Promise<string | null> {
+    // 시스템에서 제공하는 API_KEY를 직접 사용합니다.
+    const apiKey = process.env.API_KEY;
+    
     if (!apiKey) {
-      throw new Error("API 키가 제공되지 않았습니다.");
+      throw new Error("환경 변수(API_KEY)를 찾을 수 없습니다. 설정 상태를 확인해주세요.");
     }
 
     const ai = new GoogleGenAI({ apiKey });
@@ -35,7 +36,7 @@ REQUIREMENTS:
       });
 
       if (!response.candidates?.[0]?.content?.parts) {
-        throw new Error("모델 응답이 비어있습니다. (Safety filter 등)");
+        throw new Error("모델 응답이 없습니다. (Safety filter 등으로 차단되었을 수 있습니다)");
       }
 
       for (const part of response.candidates[0].content.parts) {
@@ -44,9 +45,9 @@ REQUIREMENTS:
         }
       }
       
-      throw new Error("응답에서 이미지 데이터를 찾을 수 없습니다.");
+      throw new Error("응답에 이미지 데이터가 포함되어 있지 않습니다.");
     } catch (error: any) {
-      console.error("Gemini API Error:", error);
+      console.error("Gemini API Raw Error:", error);
       throw error; 
     }
   }
