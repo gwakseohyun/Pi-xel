@@ -9,9 +9,11 @@ import ThemeCard from './components/ThemeCard';
 const App: React.FC = () => {
   const [keyword, setKeyword] = useState('');
   const [resolution] = useState<number>(64);
+  // Fix: Use the Theme interface as the type instead of the THEMES value
   const [selectedTheme, setSelectedTheme] = useState<Theme>(THEMES[0]);
   const [history, setHistory] = useState<{url: string, keyword: string}[]>([]);
   const [hasKey, setHasKey] = useState<boolean>(true);
+  const [isCheckingKey, setIsCheckingKey] = useState(true);
   
   const [state, setState] = useState<GenerationState>({
     isGenerating: false,
@@ -22,13 +24,17 @@ const App: React.FC = () => {
 
   const geminiService = useRef(new GeminiService());
 
-  // API 키 선택 상태 체크
   useEffect(() => {
     const checkKey = async () => {
       if (window.aistudio) {
-        const selected = await window.aistudio.hasSelectedApiKey();
-        setHasKey(selected || !!process.env.API_KEY);
+        try {
+          const selected = await window.aistudio.hasSelectedApiKey();
+          setHasKey(selected);
+        } catch (e) {
+          setHasKey(false);
+        }
       }
+      setIsCheckingKey(false);
     };
     checkKey();
   }, []);
@@ -36,21 +42,19 @@ const App: React.FC = () => {
   const handleConnectKey = async () => {
     if (window.aistudio) {
       await window.aistudio.openSelectKey();
+      // Fix: Assume the key selection was successful after triggering openSelectKey() as per guidelines
       setHasKey(true);
       setState(prev => ({ ...prev, error: null }));
     }
   };
 
-  const handleDownload = (url: string, kw: string) => {
-    downloadImage(url, `pixel-art-${kw.replace(/\s+/g, '-').toLowerCase()}.png`);
-  };
-
   const handleGenerate = async () => {
     if (!keyword.trim()) return;
 
-    // 키가 없는 경우 선택창 유도
+    // 키가 없는 경우 선택창 유도 및 중단
     if (!hasKey && window.aistudio) {
       await handleConnectKey();
+      return; 
     }
 
     setState(prev => ({ ...prev, isGenerating: true, error: null }));
@@ -72,70 +76,71 @@ const App: React.FC = () => {
         setHistory(prev => [{url: processedImage, keyword}, ...prev].slice(0, 8));
       }
     } catch (err: any) {
-      let errorMessage = "Generation failed.";
+      let errorMessage = "생성에 실패했습니다.";
       const msg = err.message || "";
       
-      if (msg.includes("API Key must be set") || msg.includes("not found") || msg.includes("401")) {
-        errorMessage = "API 키가 설정되지 않았거나 유효하지 않습니다. 아래 버튼을 눌러 키를 연결해주세요.";
+      // Fix: Handle 'Requested entity was not found.' error by resetting key state as per guidelines
+      if (msg.includes("API key not found") || msg.includes("401") || msg.includes("404") || msg.includes("Requested entity was not found.")) {
+        errorMessage = "유효한 API 키가 없습니다. 유료 결제가 연동된 프로젝트의 키를 선택해주세요.";
         setHasKey(false);
-      } else if (msg.includes("BILLING_REQUIRED") || msg.includes("quota")) {
-        errorMessage = "API 할당량이 부족하거나 결제가 필요합니다. (Paid GCP Project 필요)";
+      } else if (msg.includes("BILLING_REQUIRED")) {
+        errorMessage = "선택한 프로젝트에 결제가 연동되어 있지 않습니다.";
       } else {
-        errorMessage = msg || "알 수 없는 오류가 발생했습니다.";
+        errorMessage = "API 오류가 발생했습니다. 키 설정을 다시 확인해주세요.";
       }
 
-      setState(prev => ({
-        ...prev,
-        isGenerating: false,
-        error: errorMessage
-      }));
+      setState(prev => ({ ...prev, isGenerating: false, error: errorMessage }));
     }
   };
 
+  if (isCheckingKey) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col md:flex-row">
-      <aside className="w-full md:w-[400px] bg-slate-800 border-r border-slate-700 p-6 overflow-y-auto">
+      <aside className="w-full md:w-[400px] bg-slate-800 border-r border-slate-700 p-6 overflow-y-auto shadow-2xl z-20">
         <div className="mb-10">
-          <h1 className="pixel-font text-2xl text-blue-400">Pi-XEL</h1>
-          <p className="text-slate-500 text-[10px] mt-1 uppercase tracking-widest">AI Pixel Art Generator</p>
+          <h1 className="pixel-font text-2xl text-blue-400 tracking-tighter">Pi-XEL</h1>
+          <p className="text-slate-500 text-[10px] mt-1 uppercase tracking-[0.3em]">AI Pixel Art Lab</p>
         </div>
 
         {!hasKey && (
-          <div className="mb-8 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
-            <p className="text-amber-400 text-[11px] mb-3 leading-relaxed font-semibold">
-              브라우저 환경에서 API 실행을 위해 키 연결이 필요합니다.
+          <div className="mb-8 p-5 bg-blue-600/10 border border-blue-500/30 rounded-2xl animate-in fade-in slide-in-from-top-4 duration-500">
+            <h4 className="text-blue-400 font-bold text-sm mb-2 flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              준비 단계가 필요합니다
+            </h4>
+            <p className="text-slate-400 text-[11px] mb-4 leading-relaxed">
+              이미지 생성을 위해 <strong>유료 결제가 연동된 Google Cloud 프로젝트</strong>의 API 키를 연결해야 합니다.
             </p>
             <button 
               onClick={handleConnectKey}
-              className="w-full py-2 bg-amber-500 hover:bg-amber-400 text-slate-900 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-2"
+              className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-blue-600/20 active:scale-95 flex items-center justify-center gap-2"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
-              Google API 키 연결하기
+              API 키 선택창 열기
             </button>
-            <a 
-              href="https://ai.google.dev/gemini-api/docs/billing" 
-              target="_blank" 
-              className="block text-center mt-2 text-[9px] text-slate-500 underline"
-            >
-              Billing Documentation 안내
-            </a>
           </div>
         )}
 
         <div className="space-y-8">
-          <div>
-            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2 tracking-widest">KEYWORD</label>
+          <div className="group">
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2 tracking-widest group-focus-within:text-blue-400 transition-colors">WHAT TO DRAW?</label>
             <input 
               type="text" 
               value={keyword} 
               onChange={(e) => setKeyword(e.target.value)} 
-              placeholder="e.g. Vintage Camera" 
+              placeholder="e.g. Cyberpunk Cat" 
               className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-4 focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-200 transition-all shadow-inner" 
             />
           </div>
 
           <div>
-            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-3 tracking-widest">Style Themes</label>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-3 tracking-widest">ART STYLE</label>
             <div className="grid grid-cols-2 gap-3">
               {THEMES.map(t => (
                 <ThemeCard 
@@ -158,70 +163,73 @@ const App: React.FC = () => {
             }`}
           >
             {state.isGenerating ? (
-              <>
+              <div className="flex items-center gap-2">
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                <span>Creating...</span>
-              </>
-            ) : "Generate Pixels"}
+                <span>생성 중...</span>
+              </div>
+            ) : "픽셀아트 생성하기"}
           </button>
         </div>
       </aside>
 
-      <main className="flex-1 bg-slate-950 p-6 md:p-12 flex flex-col items-center justify-center relative min-h-[500px]">
+      <main className="flex-1 bg-slate-950 p-6 md:p-12 flex flex-col items-center justify-center relative min-h-[600px]">
         {state.error && (
-          <div className="absolute top-10 inset-x-10 max-w-2xl mx-auto bg-red-500/10 border border-red-500/30 p-5 rounded-2xl text-center backdrop-blur-md z-30">
-            <p className="text-red-400 text-sm font-bold">{state.error}</p>
+          <div className="absolute top-10 inset-x-10 max-w-xl mx-auto bg-red-500/10 border border-red-500/30 p-4 rounded-2xl text-center backdrop-blur-md z-30 animate-in fade-in zoom-in-95">
+            <p className="text-red-400 text-xs font-bold">{state.error}</p>
           </div>
         )}
 
-        <div className="w-full max-w-lg aspect-square bg-slate-900/30 rounded-[3rem] border border-slate-800/50 flex items-center justify-center relative overflow-hidden shadow-2xl group">
+        <div className="w-full max-w-lg aspect-square bg-slate-900/30 rounded-[3rem] border border-slate-800/50 flex items-center justify-center relative overflow-hidden shadow-2xl">
           {state.isGenerating ? (
              <div className="flex flex-col items-center gap-6">
                 <div className="relative">
-                  <div className="w-20 h-20 border-4 border-blue-500/20 rounded-full"></div>
-                  <div className="absolute top-0 w-20 h-20 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                  <div className="w-24 h-24 border-4 border-blue-500/10 rounded-full scale-150 animate-pulse"></div>
+                  <div className="absolute top-0 w-24 h-24 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                 </div>
-                <span className="text-blue-500 pixel-font text-[10px] animate-pulse tracking-widest">PIXELATING</span>
+                <div className="text-center">
+                  <span className="text-blue-500 pixel-font text-[10px] block mb-2 tracking-[0.2em]">PIXELATING...</span>
+                  <p className="text-slate-500 text-[10px]">AI가 픽셀을 한 땀 한 땀 찍고 있습니다.</p>
+                </div>
              </div>
           ) : state.resultImageUrl ? (
-            <div className="w-full h-full flex flex-col items-center justify-center p-8 animate-in zoom-in-95 duration-500">
+            <div className="w-full h-full flex flex-col items-center justify-center p-12 animate-in zoom-in-95 duration-500">
               <img 
                 src={state.resultImageUrl} 
-                className="w-full h-full object-contain pixelated drop-shadow-[0_0_30px_rgba(59,130,246,0.2)]" 
+                className="w-full h-full object-contain pixelated drop-shadow-[0_0_50px_rgba(59,130,246,0.3)]" 
                 alt="Generated Pixel Art"
               />
-              <div className="absolute bottom-10 flex gap-4 z-20">
+              <div className="absolute bottom-12 flex gap-4">
                 <button 
-                  onClick={() => handleDownload(state.resultImageUrl!, keyword)} 
-                  className="bg-white text-black px-10 py-4 rounded-full font-bold text-sm hover:scale-105 active:scale-95 transition-all shadow-xl"
+                  onClick={() => downloadImage(state.resultImageUrl!, keyword)} 
+                  className="bg-white text-black px-12 py-4 rounded-full font-bold text-sm hover:scale-105 active:scale-95 transition-all shadow-2xl flex items-center gap-2"
                 >
-                  Save PNG
+                  이미지 저장
                 </button>
               </div>
             </div>
           ) : (
-            <div className="flex flex-col items-center text-slate-700">
-              <div className="w-24 h-24 mb-6 border-4 border-dashed border-slate-800 rounded-3xl flex items-center justify-center">
-                <svg className="w-8 h-8 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            <div className="flex flex-col items-center text-slate-800">
+              <div className="w-32 h-32 mb-8 border-4 border-dashed border-slate-800/50 rounded-[2.5rem] flex items-center justify-center">
+                <svg className="w-12 h-12 opacity-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
               </div>
-              <p className="font-bold uppercase tracking-[0.3em] text-xs">Waiting for Input</p>
+              <p className="font-bold uppercase tracking-[0.4em] text-[10px] text-slate-800">Ready to Create</p>
             </div>
           )}
         </div>
 
         {history.length > 0 && (
-          <div className="mt-16 w-full max-w-4xl">
-            <h3 className="text-[10px] font-bold text-slate-600 uppercase tracking-[0.2em] mb-6 text-center">History</h3>
-            <div className="flex gap-4 overflow-x-auto pb-4 justify-center">
+          <div className="mt-20 w-full max-w-4xl animate-in fade-in slide-in-from-bottom-8 duration-700">
+            <h3 className="text-[10px] font-bold text-slate-700 uppercase tracking-[0.3em] mb-8 text-center">Collection</h3>
+            <div className="flex gap-6 overflow-x-auto pb-6 px-4 justify-center no-scrollbar">
               {history.map((item, idx) => (
                 <button 
                   key={idx} 
-                  className="w-20 h-20 flex-shrink-0 bg-slate-900 rounded-2xl p-2 border border-slate-800 hover:border-blue-500/50 transition-all"
+                  className="w-24 h-24 flex-shrink-0 bg-slate-900/50 rounded-2xl p-3 border border-slate-800 hover:border-blue-500/50 hover:bg-slate-800 transition-all group relative"
                   onClick={() => setState(prev => ({ ...prev, resultImageUrl: item.url }))}
                 >
-                  <img src={item.url} className="w-full h-full object-contain pixelated" alt="History" />
+                  <img src={item.url} className="w-full h-full object-contain pixelated group-hover:scale-110 transition-transform" alt="History" />
                 </button>
               ))}
             </div>
