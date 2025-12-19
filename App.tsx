@@ -27,16 +27,17 @@ const App: React.FC = () => {
     setState(prev => ({ ...prev, isGenerating: true, error: null }));
 
     try {
-      // 1. Check for API key presence via the bridge
+      // 1. API 키 확인 및 브릿지 연동
       if (window.aistudio) {
         const hasKey = await window.aistudio.hasSelectedApiKey();
-        if (!hasKey) {
+        // 키가 없거나 process.env.API_KEY가 아직 주입되지 않은 경우
+        if (!hasKey && !process.env.API_KEY) {
           await window.aistudio.openSelectKey();
-          // Per guidelines, proceed immediately after opening the dialog
+          // 지침에 따라 키 선택 창을 연 후 즉시 다음 단계로 진행 (레이스 컨디션 방지)
         }
       }
 
-      // 2. Attempt generation
+      // 2. 생성 시도
       const rawImage = await geminiService.current.generatePixelArt(
         keyword,
         selectedTheme.promptSuffix
@@ -53,22 +54,22 @@ const App: React.FC = () => {
         setHistory(prev => [{url: processedImage, keyword}, ...prev].slice(0, 8));
       }
     } catch (err: any) {
-      console.error("Generation Error:", err);
-      let errorMessage = "Generation failed.";
+      console.error("Generation Error Flow:", err);
+      let errorMessage = "생성 중 오류가 발생했습니다.";
       const msg = err.message || String(err);
 
-      // 3. Handle specific bridge/project errors
-      if (msg.includes("Requested entity was not found") || msg.includes("404")) {
-        errorMessage = "Project Error: Ensure the selected project has Gemini API enabled.";
-        // Reset key state if it fails specifically like this
+      // 에러 메시지 한글화 및 대응 로직
+      if (msg === "API_KEY_NOT_FOUND" || msg === "INVALID_API_KEY") {
+        errorMessage = "유효한 API 키가 없습니다. 다시 한 번 키를 선택해 주세요.";
         if (window.aistudio) await window.aistudio.openSelectKey();
-      } else if (msg.includes("401") || msg.includes("API Key")) {
-        errorMessage = "API Key Error: Please re-select a valid API key.";
-        if (window.aistudio) await window.aistudio.openSelectKey();
-      } else if (msg.includes("SAFETY")) {
-        errorMessage = "Blocked by safety filters. Try a different prompt.";
+      } else if (msg === "MODEL_OR_PROJECT_NOT_FOUND") {
+        errorMessage = "프로젝트 설정 오류입니다. Gemini API가 활성화된 프로젝트인지 확인해 주세요.";
+      } else if (msg === "SAFETY_OR_EMPTY") {
+        errorMessage = "안전 필터에 의해 차단되었거나 결과가 비어 있습니다. 다른 단어를 입력해 주세요.";
+      } else if (msg === "RATE_LIMIT_EXCEEDED") {
+        errorMessage = "요청 한도를 초과했습니다. 잠시 후 다시 시도해 주세요.";
       } else {
-        errorMessage = msg;
+        errorMessage = `오류: ${msg}`;
       }
 
       setState(prev => ({ ...prev, isGenerating: false, error: errorMessage }));
@@ -77,7 +78,7 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col md:flex-row font-sans">
-      {/* Sidebar */}
+      {/* Sidebar - UI 원본 유지 */}
       <aside className="w-full md:w-[400px] bg-slate-800 border-r border-slate-700 p-6 overflow-y-auto z-20 shadow-xl">
         <div className="mb-10">
           <h1 className="pixel-font text-2xl text-blue-400 tracking-tighter">Pi-XEL</h1>
@@ -129,7 +130,7 @@ const App: React.FC = () => {
         </div>
       </aside>
 
-      {/* Main View */}
+      {/* Main View - UI 원본 유지 */}
       <main className="flex-1 bg-slate-950 p-6 md:p-12 flex flex-col items-center justify-center relative min-h-[600px]">
         {state.error && (
           <div className="absolute top-10 inset-x-10 max-w-xl mx-auto bg-red-500/10 border border-red-500/30 p-4 rounded-2xl text-center backdrop-blur-md z-30 animate-in fade-in zoom-in-95">
