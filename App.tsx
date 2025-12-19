@@ -1,8 +1,8 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { Theme, GenerationState } from './types';
 import { THEMES } from './constants';
-import { GeminiService } from './services/geminiService';
+import { generatePixelArtImage } from './services/geminiService';
 import { processPixelArt, downloadImage } from './utils/imageUtils';
 import ThemeCard from './components/ThemeCard';
 
@@ -19,41 +19,40 @@ const App: React.FC = () => {
     originalResult: null
   });
 
-  const geminiService = useRef(new GeminiService());
-
   const handleGenerate = async () => {
     if (!keyword.trim()) return;
 
     setState(prev => ({ ...prev, isGenerating: true, error: null }));
 
     try {
-      // 복잡한 브릿지 체크 없이 바로 서비스를 호출합니다.
-      const rawImage = await geminiService.current.generatePixelArt(
+      // 키 선택 팝업이나 사전 체크 없이 바로 생성을 시도합니다.
+      const rawImage = await generatePixelArtImage(
         keyword,
         selectedTheme.promptSuffix
       );
 
-      if (rawImage) {
-        const processedImage = await processPixelArt(rawImage, resolution);
-        setState(prev => ({
-          ...prev,
-          isGenerating: false,
-          resultImageUrl: processedImage,
-          originalResult: rawImage
-        }));
-        setHistory(prev => [{url: processedImage, keyword}, ...prev].slice(0, 8));
-      }
+      const processedImage = await processPixelArt(rawImage, resolution);
+      
+      setState(prev => ({
+        ...prev,
+        isGenerating: false,
+        resultImageUrl: processedImage,
+        originalResult: rawImage
+      }));
+      
+      setHistory(prev => [{url: processedImage, keyword}, ...prev].slice(0, 8));
     } catch (err: any) {
-      console.error("HandleGenerate Exception:", err);
-      // 실제 에러 메시지를 그대로 노출하여 문제 원인을 파악합니다.
-      const displayMsg = err.message || String(err);
-      setState(prev => ({ ...prev, isGenerating: false, error: `발생한 에러: ${displayMsg}` }));
+      console.error("Generate Flow Error:", err);
+      setState(prev => ({ 
+        ...prev, 
+        isGenerating: false, 
+        error: `생성 실패: ${err.message}` 
+      }));
     }
   };
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col md:flex-row font-sans">
-      {/* Sidebar UI 보존 */}
       <aside className="w-full md:w-[400px] bg-slate-800 border-r border-slate-700 p-6 overflow-y-auto z-20 shadow-xl">
         <div className="mb-10">
           <h1 className="pixel-font text-2xl text-blue-400 tracking-tighter">Pi-XEL</h1>
@@ -105,7 +104,6 @@ const App: React.FC = () => {
         </div>
       </aside>
 
-      {/* Main Content UI 보존 */}
       <main className="flex-1 bg-slate-950 p-6 md:p-12 flex flex-col items-center justify-center relative min-h-[600px]">
         {state.error && (
           <div className="absolute top-10 inset-x-10 max-w-xl mx-auto bg-red-500/10 border border-red-500/30 p-4 rounded-2xl text-center backdrop-blur-md z-30 animate-in fade-in zoom-in-95">
