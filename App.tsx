@@ -22,15 +22,17 @@ const App: React.FC = () => {
   const handleGenerate = async () => {
     if (!keyword.trim()) return;
 
+    // 초기화 및 로딩 시작
     setState(prev => ({ ...prev, isGenerating: true, error: null }));
 
     try {
-      // 키 선택 팝업이나 사전 체크 없이 바로 생성을 시도합니다.
+      // 보이지 않는 곳에서 API를 호출하여 결과를 가져옵니다.
       const rawImage = await generatePixelArtImage(
         keyword,
         selectedTheme.promptSuffix
       );
 
+      // 가져온 이미지를 실제 픽셀 아트처럼 가공 (배경 제거 및 해상도 조정)
       const processedImage = await processPixelArt(rawImage, resolution);
       
       setState(prev => ({
@@ -40,19 +42,21 @@ const App: React.FC = () => {
         originalResult: rawImage
       }));
       
+      // 최근 내역 추가
       setHistory(prev => [{url: processedImage, keyword}, ...prev].slice(0, 8));
     } catch (err: any) {
-      console.error("Generate Flow Error:", err);
+      console.error("Generation Error:", err);
       setState(prev => ({ 
         ...prev, 
         isGenerating: false, 
-        error: `생성 실패: ${err.message}` 
+        error: err.message || "생성에 실패했습니다." 
       }));
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col md:flex-row font-sans">
+    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col md:flex-row font-sans overflow-hidden">
+      {/* Sidebar Section */}
       <aside className="w-full md:w-[400px] bg-slate-800 border-r border-slate-700 p-6 overflow-y-auto z-20 shadow-xl">
         <div className="mb-10">
           <h1 className="pixel-font text-2xl text-blue-400 tracking-tighter">Pi-XEL</h1>
@@ -104,9 +108,10 @@ const App: React.FC = () => {
         </div>
       </aside>
 
+      {/* Main Preview Section */}
       <main className="flex-1 bg-slate-950 p-6 md:p-12 flex flex-col items-center justify-center relative min-h-[600px]">
         {state.error && (
-          <div className="absolute top-10 inset-x-10 max-w-xl mx-auto bg-red-500/10 border border-red-500/30 p-4 rounded-2xl text-center backdrop-blur-md z-30 animate-in fade-in zoom-in-95">
+          <div className="absolute top-10 inset-x-10 max-w-xl mx-auto bg-red-500/10 border border-red-500/30 p-4 rounded-2xl text-center backdrop-blur-md z-30">
             <p className="text-red-400 text-[10px] font-bold uppercase tracking-wider">{state.error}</p>
           </div>
         )}
@@ -125,7 +130,7 @@ const App: React.FC = () => {
               <img 
                 src={state.resultImageUrl} 
                 className="w-full h-full object-contain pixelated drop-shadow-[0_0_50px_rgba(59,130,246,0.3)]" 
-                alt="Result"
+                alt="Generated Pixel Art"
               />
               <div className="absolute bottom-12 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button 
@@ -148,6 +153,7 @@ const App: React.FC = () => {
           )}
         </div>
 
+        {/* Recent History Bar */}
         {history.length > 0 && (
           <div className="mt-20 w-full max-w-4xl animate-in fade-in slide-in-from-bottom-8">
             <h3 className="text-[10px] font-bold text-slate-700 uppercase tracking-[0.3em] mb-8 text-center">Recent Creations</h3>
