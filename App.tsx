@@ -9,7 +9,6 @@ import ThemeCard from './components/ThemeCard';
 const App: React.FC = () => {
   const [keyword, setKeyword] = useState('');
   const [resolution] = useState<number>(64);
-  // Fix: Use the Theme interface as the type instead of the THEMES value
   const [selectedTheme, setSelectedTheme] = useState<Theme>(THEMES[0]);
   const [history, setHistory] = useState<{url: string, keyword: string}[]>([]);
   const [hasKey, setHasKey] = useState<boolean>(true);
@@ -42,7 +41,6 @@ const App: React.FC = () => {
   const handleConnectKey = async () => {
     if (window.aistudio) {
       await window.aistudio.openSelectKey();
-      // Fix: Assume the key selection was successful after triggering openSelectKey() as per guidelines
       setHasKey(true);
       setState(prev => ({ ...prev, error: null }));
     }
@@ -51,7 +49,6 @@ const App: React.FC = () => {
   const handleGenerate = async () => {
     if (!keyword.trim()) return;
 
-    // 키가 없는 경우 선택창 유도 및 중단
     if (!hasKey && window.aistudio) {
       await handleConnectKey();
       return; 
@@ -76,17 +73,19 @@ const App: React.FC = () => {
         setHistory(prev => [{url: processedImage, keyword}, ...prev].slice(0, 8));
       }
     } catch (err: any) {
-      let errorMessage = "생성에 실패했습니다.";
-      const msg = err.message || "";
+      let errorMessage = "Generation failed.";
+      const msg = err.message || String(err);
       
-      // Fix: Handle 'Requested entity was not found.' error by resetting key state as per guidelines
-      if (msg.includes("API key not found") || msg.includes("401") || msg.includes("404") || msg.includes("Requested entity was not found.")) {
-        errorMessage = "유효한 API 키가 없습니다. 유료 결제가 연동된 프로젝트의 키를 선택해주세요.";
+      if (msg.includes("401") || msg.includes("404") || msg.includes("Requested entity was not found") || msg.includes("API key not found")) {
+        errorMessage = "Invalid or missing API key. Please connect a key from a paid GCP project.";
         setHasKey(false);
-      } else if (msg.includes("BILLING_REQUIRED")) {
-        errorMessage = "선택한 프로젝트에 결제가 연동되어 있지 않습니다.";
+      } else if (msg.includes("BILLING_REQUIRED") || msg.includes("quota")) {
+        errorMessage = "Billing required or quota exceeded. Use a paid GCP project.";
+      } else if (msg.includes("SAFETY")) {
+        errorMessage = "The content was blocked by safety filters.";
       } else {
-        errorMessage = "API 오류가 발생했습니다. 키 설정을 다시 확인해주세요.";
+        // Provide the actual error message so the user knows exactly what's wrong
+        errorMessage = `API Error: ${msg}`;
       }
 
       setState(prev => ({ ...prev, isGenerating: false, error: errorMessage }));
@@ -113,34 +112,41 @@ const App: React.FC = () => {
           <div className="mb-8 p-5 bg-blue-600/10 border border-blue-500/30 rounded-2xl animate-in fade-in slide-in-from-top-4 duration-500">
             <h4 className="text-blue-400 font-bold text-sm mb-2 flex items-center gap-2">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-              준비 단계가 필요합니다
+              Key Required
             </h4>
             <p className="text-slate-400 text-[11px] mb-4 leading-relaxed">
-              이미지 생성을 위해 <strong>유료 결제가 연동된 Google Cloud 프로젝트</strong>의 API 키를 연결해야 합니다.
+              To generate images, you must connect an API key from a <strong>paid GCP project</strong>.
             </p>
             <button 
               onClick={handleConnectKey}
               className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-blue-600/20 active:scale-95 flex items-center justify-center gap-2"
             >
-              API 키 선택창 열기
+              Connect API Key
             </button>
+            <a 
+              href="https://ai.google.dev/gemini-api/docs/billing" 
+              target="_blank" 
+              className="block text-center mt-3 text-[9px] text-slate-500 underline uppercase tracking-widest hover:text-slate-300"
+            >
+              Billing Documentation
+            </a>
           </div>
         )}
 
         <div className="space-y-8">
           <div className="group">
-            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2 tracking-widest group-focus-within:text-blue-400 transition-colors">WHAT TO DRAW?</label>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2 tracking-widest group-focus-within:text-blue-400 transition-colors">What to Draw?</label>
             <input 
               type="text" 
               value={keyword} 
               onChange={(e) => setKeyword(e.target.value)} 
               placeholder="e.g. Cyberpunk Cat" 
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-4 focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-200 transition-all shadow-inner" 
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-4 focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-200 transition-all shadow-inner placeholder:text-slate-700" 
             />
           </div>
 
           <div>
-            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-3 tracking-widest">ART STYLE</label>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-3 tracking-widest">Art Style</label>
             <div className="grid grid-cols-2 gap-3">
               {THEMES.map(t => (
                 <ThemeCard 
@@ -165,9 +171,9 @@ const App: React.FC = () => {
             {state.isGenerating ? (
               <div className="flex items-center gap-2">
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                <span>생성 중...</span>
+                <span>Generating...</span>
               </div>
-            ) : "픽셀아트 생성하기"}
+            ) : "Generate Pixel Art"}
           </button>
         </div>
       </aside>
@@ -175,7 +181,7 @@ const App: React.FC = () => {
       <main className="flex-1 bg-slate-950 p-6 md:p-12 flex flex-col items-center justify-center relative min-h-[600px]">
         {state.error && (
           <div className="absolute top-10 inset-x-10 max-w-xl mx-auto bg-red-500/10 border border-red-500/30 p-4 rounded-2xl text-center backdrop-blur-md z-30 animate-in fade-in zoom-in-95">
-            <p className="text-red-400 text-xs font-bold">{state.error}</p>
+            <p className="text-red-400 text-xs font-bold uppercase tracking-wider">{state.error}</p>
           </div>
         )}
 
@@ -188,7 +194,7 @@ const App: React.FC = () => {
                 </div>
                 <div className="text-center">
                   <span className="text-blue-500 pixel-font text-[10px] block mb-2 tracking-[0.2em]">PIXELATING...</span>
-                  <p className="text-slate-500 text-[10px]">AI가 픽셀을 한 땀 한 땀 찍고 있습니다.</p>
+                  <p className="text-slate-500 text-[10px] uppercase tracking-widest">Drafting individual pixels</p>
                 </div>
              </div>
           ) : state.resultImageUrl ? (
@@ -203,7 +209,7 @@ const App: React.FC = () => {
                   onClick={() => downloadImage(state.resultImageUrl!, keyword)} 
                   className="bg-white text-black px-12 py-4 rounded-full font-bold text-sm hover:scale-105 active:scale-95 transition-all shadow-2xl flex items-center gap-2"
                 >
-                  이미지 저장
+                  Download PNG
                 </button>
               </div>
             </div>
