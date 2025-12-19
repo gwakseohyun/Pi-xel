@@ -6,16 +6,24 @@ export class GeminiService {
     keyword: string, 
     themePrompt: string
   ): Promise<string | null> {
-    // Create instance right before the call to ensure the latest API key is used
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    // Guidelines: Use process.env.API_KEY directly and instantiate inside the call
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) {
+      throw new Error("API Key must be set when running in a browser. Please check your key configuration.");
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
+    
+    // Using gemini-2.5-flash-image as requested for high-performance generation
     const modelName = 'gemini-2.5-flash-image';
 
-    const fullPrompt = `Task: Professional 2D pixel art of a literal "${keyword}".
-STRICT TECHNICAL REQUIREMENTS:
-1. BACKGROUND: Pure Magenta (#FF00FF) solid background.
-2. SUBJECT: Solid, opaque inanimate object only. No faces/eyes.
-3. OUTLINE: Clear black outline.
-4. STYLE: ${themePrompt}.`;
+    const fullPrompt = `Create a 2D professional pixel art asset of a "${keyword}".
+STYLE: ${themePrompt}.
+REQUIREMENTS:
+1. BACKGROUND: MUST be a flat solid Magenta (#FF00FF).
+2. PERSPECTIVE: Flat 2D view (side or top).
+3. OUTLINE: Clear black borders.
+4. QUALITY: Sharp pixels, no blur.`;
     
     try {
       const response = await ai.models.generateContent({
@@ -28,16 +36,19 @@ STRICT TECHNICAL REQUIREMENTS:
         }
       });
 
-      if (!response.candidates?.[0]?.content?.parts) throw new Error("API returned an empty response. This might be due to safety filters.");
+      if (!response.candidates?.[0]?.content?.parts) {
+        throw new Error("The API returned an empty result. This might be a safety filter block.");
+      }
 
       for (const part of response.candidates[0].content.parts) {
-        if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
+        if (part.inlineData) {
+          return `data:image/png;base64,${part.inlineData.data}`;
+        }
       }
       
-      // If we are here, no image part was found
-      throw new Error("No image data found in API response.");
+      throw new Error("No image data found in response.");
     } catch (error: any) {
-      console.error("Gemini API Error Detail:", error);
+      console.error("Gemini API Error:", error);
       throw error;
     }
   }
