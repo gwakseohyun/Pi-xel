@@ -28,10 +28,13 @@ const App: React.FC = () => {
       if (window.aistudio) {
         try {
           const selected = await window.aistudio.hasSelectedApiKey();
-          setHasKey(selected);
+          // Also check if process.env.API_KEY actually has a value
+          setHasKey(selected && !!process.env.API_KEY);
         } catch (e) {
           setHasKey(false);
         }
+      } else {
+        setHasKey(!!process.env.API_KEY);
       }
       setIsCheckingKey(false);
     };
@@ -40,16 +43,23 @@ const App: React.FC = () => {
 
   const handleConnectKey = async () => {
     if (window.aistudio) {
-      await window.aistudio.openSelectKey();
-      setHasKey(true);
-      setState(prev => ({ ...prev, error: null }));
+      try {
+        await window.aistudio.openSelectKey();
+        // After triggering the dialog, we assume a key will be available
+        setHasKey(true);
+        setState(prev => ({ ...prev, error: null }));
+      } catch (e) {
+        console.error("Failed to open key selector", e);
+      }
     }
   };
 
   const handleGenerate = async () => {
     if (!keyword.trim()) return;
 
-    if (!hasKey && window.aistudio) {
+    // Verify key existence just before call
+    if (!process.env.API_KEY && window.aistudio) {
+      setState(prev => ({ ...prev, error: "API Key not found in environment. Please select a key." }));
       await handleConnectKey();
       return; 
     }
@@ -76,15 +86,14 @@ const App: React.FC = () => {
       let errorMessage = "Generation failed.";
       const msg = err.message || String(err);
       
-      if (msg.includes("401") || msg.includes("404") || msg.includes("Requested entity was not found") || msg.includes("API key not found")) {
-        errorMessage = "Invalid or missing API key. Please connect a key from a paid GCP project.";
+      if (msg.includes("API Key must be set") || msg.includes("401") || msg.includes("404") || msg.includes("Requested entity was not found")) {
+        errorMessage = "API key missing or invalid. Please select a key from a paid project.";
         setHasKey(false);
-      } else if (msg.includes("BILLING_REQUIRED") || msg.includes("quota")) {
-        errorMessage = "Billing required or quota exceeded. Use a paid GCP project.";
+      } else if (msg.includes("BILLING_REQUIRED")) {
+        errorMessage = "Billing not enabled. Please use a project with an active billing account.";
       } else if (msg.includes("SAFETY")) {
-        errorMessage = "The content was blocked by safety filters.";
+        errorMessage = "Request blocked by safety filters.";
       } else {
-        // Provide the actual error message so the user knows exactly what's wrong
         errorMessage = `API Error: ${msg}`;
       }
 
@@ -108,14 +117,14 @@ const App: React.FC = () => {
           <p className="text-slate-500 text-[10px] mt-1 uppercase tracking-[0.3em]">AI Pixel Art Lab</p>
         </div>
 
-        {!hasKey && (
+        {(!hasKey || !process.env.API_KEY) && (
           <div className="mb-8 p-5 bg-blue-600/10 border border-blue-500/30 rounded-2xl animate-in fade-in slide-in-from-top-4 duration-500">
             <h4 className="text-blue-400 font-bold text-sm mb-2 flex items-center gap-2">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-              Key Required
+              Action Required
             </h4>
             <p className="text-slate-400 text-[11px] mb-4 leading-relaxed">
-              To generate images, you must connect an API key from a <strong>paid GCP project</strong>.
+              Image generation requires an API key from a <strong>paid GCP project</strong>.
             </p>
             <button 
               onClick={handleConnectKey}
@@ -135,18 +144,18 @@ const App: React.FC = () => {
 
         <div className="space-y-8">
           <div className="group">
-            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2 tracking-widest group-focus-within:text-blue-400 transition-colors">What to Draw?</label>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2 tracking-widest group-focus-within:text-blue-400 transition-colors">Prompt Keyword</label>
             <input 
               type="text" 
               value={keyword} 
               onChange={(e) => setKeyword(e.target.value)} 
-              placeholder="e.g. Cyberpunk Cat" 
+              placeholder="e.g. Neon Sword" 
               className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-4 focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-200 transition-all shadow-inner placeholder:text-slate-700" 
             />
           </div>
 
           <div>
-            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-3 tracking-widest">Art Style</label>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-3 tracking-widest">Select Style</label>
             <div className="grid grid-cols-2 gap-3">
               {THEMES.map(t => (
                 <ThemeCard 
@@ -171,7 +180,7 @@ const App: React.FC = () => {
             {state.isGenerating ? (
               <div className="flex items-center gap-2">
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                <span>Generating...</span>
+                <span>Processing...</span>
               </div>
             ) : "Generate Pixel Art"}
           </button>
@@ -194,7 +203,7 @@ const App: React.FC = () => {
                 </div>
                 <div className="text-center">
                   <span className="text-blue-500 pixel-font text-[10px] block mb-2 tracking-[0.2em]">PIXELATING...</span>
-                  <p className="text-slate-500 text-[10px] uppercase tracking-widest">Drafting individual pixels</p>
+                  <p className="text-slate-500 text-[10px] uppercase tracking-widest">Rendering Dot Matrix</p>
                 </div>
              </div>
           ) : state.resultImageUrl ? (
@@ -209,7 +218,7 @@ const App: React.FC = () => {
                   onClick={() => downloadImage(state.resultImageUrl!, keyword)} 
                   className="bg-white text-black px-12 py-4 rounded-full font-bold text-sm hover:scale-105 active:scale-95 transition-all shadow-2xl flex items-center gap-2"
                 >
-                  Download PNG
+                  Download Image
                 </button>
               </div>
             </div>
@@ -227,7 +236,7 @@ const App: React.FC = () => {
 
         {history.length > 0 && (
           <div className="mt-20 w-full max-w-4xl animate-in fade-in slide-in-from-bottom-8 duration-700">
-            <h3 className="text-[10px] font-bold text-slate-700 uppercase tracking-[0.3em] mb-8 text-center">Collection</h3>
+            <h3 className="text-[10px] font-bold text-slate-700 uppercase tracking-[0.3em] mb-8 text-center">Recent Creations</h3>
             <div className="flex gap-6 overflow-x-auto pb-6 px-4 justify-center no-scrollbar">
               {history.map((item, idx) => (
                 <button 
