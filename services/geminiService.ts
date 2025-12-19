@@ -6,7 +6,7 @@ export class GeminiService {
     keyword: string, 
     themePrompt: string
   ): Promise<string | null> {
-    // 매 호출마다 새로운 인스턴스를 생성하여 선택된 최신 API 키를 반영합니다.
+    // Create instance right before the call to ensure the latest API key is used
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const modelName = 'gemini-2.5-flash-image';
 
@@ -28,14 +28,16 @@ STRICT TECHNICAL REQUIREMENTS:
         }
       });
 
-      if (!response.candidates?.[0]?.content?.parts) throw new Error("EMPTY_RESPONSE");
+      if (!response.candidates?.[0]?.content?.parts) throw new Error("API returned an empty response. This might be due to safety filters.");
 
       for (const part of response.candidates[0].content.parts) {
         if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
       }
-      return null;
+      
+      // If we are here, no image part was found
+      throw new Error("No image data found in API response.");
     } catch (error: any) {
-      console.error("Gemini API Error:", error);
+      console.error("Gemini API Error Detail:", error);
       throw error;
     }
   }
