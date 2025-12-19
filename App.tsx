@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { Theme, GenerationState } from './types';
 import { THEMES } from './constants';
 import { GeminiService } from './services/geminiService';
@@ -27,12 +27,16 @@ const App: React.FC = () => {
     setState(prev => ({ ...prev, isGenerating: true, error: null }));
 
     try {
-      // Check if API Key exists, if not, prompt user (for the browser environment requirement)
-      if (!process.env.API_KEY && window.aistudio) {
-        await window.aistudio.openSelectKey();
-        // The guidelines state to assume the key selection was successful and proceed
+      // 1. Check for API key presence via the bridge
+      if (window.aistudio) {
+        const hasKey = await window.aistudio.hasSelectedApiKey();
+        if (!hasKey) {
+          await window.aistudio.openSelectKey();
+          // Per guidelines, proceed immediately after opening the dialog
+        }
       }
 
+      // 2. Attempt generation
       const rawImage = await geminiService.current.generatePixelArt(
         keyword,
         selectedTheme.promptSuffix
@@ -50,17 +54,19 @@ const App: React.FC = () => {
       }
     } catch (err: any) {
       console.error("Generation Error:", err);
-      let errorMessage = "An error occurred during generation.";
+      let errorMessage = "Generation failed.";
       const msg = err.message || String(err);
 
-      // Handle specific API/Key errors
-      if (msg.includes("API Key must be set") || msg.includes("401") || msg.includes("Requested entity was not found")) {
-        errorMessage = "API Key error. Opening key selection...";
-        if (window.aistudio) {
-          await window.aistudio.openSelectKey();
-        }
+      // 3. Handle specific bridge/project errors
+      if (msg.includes("Requested entity was not found") || msg.includes("404")) {
+        errorMessage = "Project Error: Ensure the selected project has Gemini API enabled.";
+        // Reset key state if it fails specifically like this
+        if (window.aistudio) await window.aistudio.openSelectKey();
+      } else if (msg.includes("401") || msg.includes("API Key")) {
+        errorMessage = "API Key Error: Please re-select a valid API key.";
+        if (window.aistudio) await window.aistudio.openSelectKey();
       } else if (msg.includes("SAFETY")) {
-        errorMessage = "Content blocked by safety filters. Please try another prompt.";
+        errorMessage = "Blocked by safety filters. Try a different prompt.";
       } else {
         errorMessage = msg;
       }
